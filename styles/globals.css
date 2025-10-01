@@ -1,0 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #10001F; /* A deep purple base */
+  /* This is the corrected line with modern syntax for opacity (#...66) */
+  background-image: radial-gradient(circle at 100% 0%, #ff69b466, transparent 50%),
+                    radial-gradient(circle at 0% 100%, #1e90ff66, transparent 50%);
+  color: white;
+  font-family: 'Poppins', sans-serif;
+}
+
