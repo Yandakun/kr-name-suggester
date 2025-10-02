@@ -38,9 +38,8 @@ declare global {
       toPng: (element: HTMLElement, options?: object) => Promise<string>;
     };
   }
-  // ClipboardItem is a standard browser API. Most modern TS configs know it.
-  // We remove the redeclaration which was causing the build error.
-  // The runtime check 'typeof ClipboardItem' handles browsers that might not have it.
+  // This is a built-in browser API. We don't need to redeclare it,
+  // which was causing the build error. The runtime check handles everything.
 }
 
 const toBase64 = (file: File): Promise<string> =>
