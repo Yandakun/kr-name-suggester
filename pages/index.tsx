@@ -18,17 +18,21 @@ interface InputFormProps {
     isLoading: boolean; message: string; handleSubmit: () => void;
 }
 
+// Define specific types for global objects to completely remove 'any'
 declare global {
-    interface Window { htmlToImage: any; }
-    // This is needed for the advanced clipboard API
-    const ClipboardItem: any;
+    interface Window {
+        htmlToImage: {
+            toPng: (element: HTMLElement, options?: object) => Promise<string>;
+        };
+    }
+    const ClipboardItem: new (items: Record<string, Blob>) => Blob;
 }
 
 const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.readAsDataURL(file);
   reader.onload = () => resolve(reader.result as string);
-  reader.onerror = (error) => reject(error);
+  reader.onerror = (err) => reject(err);
 });
 
 // --- Main Component ---
@@ -78,7 +82,8 @@ const Home: NextPage = () => {
       } else {
         setRecommendation({ name: result.name, celebrity: result.celebrity }); setMessage('');
       }
-    } catch {
+    } catch (err) {
+      console.error("handleSubmit error:", err);
       setMessage('Failed to connect to the server. Please try again.');
     } finally {
       setIsLoading(false);
@@ -124,85 +129,90 @@ const InputForm = ({ gender, setGender, age, setAge, photo, handlePhotoChange, i
     );
 };
 
-// --- Result Card Sub-Component with Share System v5 ---
+// --- Result Card Sub-Component with Advanced Share ---
 const ResultCard = ({ recommendation, onReset }: { recommendation: RecommendationResult, onReset: () => void }) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
-    const [feedbackMessage, setFeedbackMessage] = useState('');
+    const [shareMessage, setShareMessage] = useState('');
 
     useEffect(() => {
         setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
     }, []);
 
     const generateImageBlob = async (): Promise<Blob | null> => {
-        if (!cardRef.current || !window.htmlToImage) {
-            console.error("Share function called before library is ready.");
-            return null;
-        }
+        if (!cardRef.current || !window.htmlToImage) { return null; }
         const dataUrl = await window.htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 });
         return await (await fetch(dataUrl)).blob();
     };
 
     const showFeedback = (msg: string) => {
-        setFeedbackMessage(msg);
-        setTimeout(() => setFeedbackMessage(''), 2500);
+        setShareMessage(msg);
+        setTimeout(() => setShareMessage(''), 2500);
     };
 
-    const handleSaveToPhotos = async () => {
+    const handleDownload = async () => {
         setIsSharing(true);
+        setShareMessage('Creating image...');
         try {
             const blob = await generateImageBlob();
             if(!blob) return;
             const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'my-korean-name.png';
-            link.click();
-            URL.revokeObjectURL(url);
-             showFeedback('Downloading image!');
-        } catch (error) {
-            console.error('Save failed:', error);
-            showFeedback('Failed to create image.');
+            if (isMobile) {
+                const newWindow = window.open(url);
+                if (newWindow) { setShareMessage("Long-press the image to save!"); } 
+                else { setShareMessage("Please allow pop-ups to save the image."); }
+            } else {
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'my-korean-name.png';
+                link.click();
+                URL.revokeObjectURL(url);
+                setShareMessage('');
+            }
+        } catch (err) {
+            console.error('Download failed:', err);
+            setShareMessage('Failed to create image.');
         } finally {
-            setIsSharing(false);
+            if(!isMobile) setIsSharing(false);
         }
     };
     
     const handleCopyToClipboard = async () => {
         if (!navigator.clipboard?.write) {
-            showFeedback('Clipboard API not supported.');
-            return;
+            showFeedback('Clipboard API not supported.'); return;
         }
         setIsSharing(true);
+        setShareMessage('Copying to clipboard...');
         try {
             const blob = await generateImageBlob();
             if(!blob) return;
             await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
-            showFeedback('Copied! Now open Instagram and paste in your Story.');
-        } catch (error) {
-            console.error("Copy failed:", error);
-            showFeedback('Copy failed. Try saving instead.');
+            showFeedback('Copied! Now paste it in your Story.');
+        } catch (err) {
+            console.error("Copy failed:", err);
+            setShareMessage('Copy failed. Try saving instead.');
         } finally {
-            setIsSharing(false);
+            setTimeout(() => { setIsSharing(false); setShareMessage(''); }, 2000);
         }
     };
 
     const handleShare = async () => {
         setIsSharing(true);
+        setShareMessage('Preparing to share...');
         try {
             const blob = await generateImageBlob();
             if(!blob) return;
             const file = new File([blob], 'my-korean-name.png', { type: blob.type });
-
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({ files: [file], title: 'My Korean Name!' });
+                setShareMessage('');
             } else {
-                showFeedback("Share not supported. Try copying!");
+                setShareMessage("Share not supported. Try copying!");
             }
-        } catch (error) {
-            console.error("Share failed:", error);
-            showFeedback('Share failed. Please try again.');
+        } catch (err) {
+            console.error("Share failed:", err);
+            setShareMessage('Share failed. Please try again.');
         } finally {
             setIsSharing(false);
         }
@@ -241,11 +251,11 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
                 {isMobile ? (
                     <div className="space-y-3">
                         <button onClick={handleCopyToClipboard} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-3 rounded-lg font-bold text-white bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:scale-105 transition-transform">
-                            <span>{isSharing ? '...' : 'Copy for Instagram Story'}</span>
+                            <span>{isSharing ? feedbackMessage || '...' : 'Copy for Instagram Story'}</span>
                         </button>
                          <div className="grid grid-cols-2 gap-3">
                             <button onClick={handleShare} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">More Share Options</button>
-                            <button onClick={handleSaveToPhotos} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">Save to Photos</button>
+                            <button onClick={handleDownload} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">Save to Photos</button>
                         </div>
                     </div>
                 ) : (
@@ -260,7 +270,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
                                 <svg width="24" height="24" viewBox="0 0 1200 1227" fill="white"><path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6902H306.615L611.412 515.685L658.88 583.579L1055.08 1150.31H892.476L569.165 687.854V687.828Z"/></svg>
                                 <span className="text-xs">X / Twitter</span>
                             </button>
-                             <button onClick={handleSaveOrDownload} disabled={isSharing} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Download Image">
+                             <button onClick={handleDownload} disabled={isSharing} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Download Image">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                                 <span className="text-xs">Download</span>
                             </button>
@@ -284,4 +294,3 @@ const Loader = () => (
 );
 
 export default Home;
-
