@@ -38,9 +38,13 @@ declare global {
       toPng: (element: HTMLElement, options?: object) => Promise<string>;
     };
   }
-  // The ClipboardItem is part of the standard DOM typings,
-  // we just need to make sure our code uses it correctly.
-  // No need to redeclare it here if tsconfig is set up correctly.
+  // This provides a proper type for the ClipboardItem constructor, which exists in modern browsers
+  const ClipboardItem: {
+    new (items: Record<string, Blob>): {
+      readonly types: string[];
+      getType(type: string): Promise<Blob>;
+    };
+  };
 }
 
 const toBase64 = (file: File): Promise<string> =>
@@ -134,17 +138,15 @@ const Home: NextPage = () => {
           <ResultCard recommendation={recommendation} onReset={handleReset} />
         ) : (
           <InputForm
-            {...{
-              gender,
-              setGender,
-              age,
-              setAge,
-              photo,
-              handlePhotoChange,
-              isLoading,
-              message,
-              handleSubmit,
-            }}
+            gender={gender}
+            setGender={setGender}
+            age={age}
+            setAge={setAge}
+            photo={photo}
+            handlePhotoChange={handlePhotoChange}
+            isLoading={isLoading}
+            message={message}
+            handleSubmit={handleSubmit}
           />
         )}
       </main>
@@ -246,7 +248,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
       if (isMobile) {
         const newWindow = window.open(url);
         if (newWindow) {
-          showFeedback("Long-press the image to save!");
+            // No feedback needed here as user interacts with new tab
         } else {
           showFeedback("Please allow pop-ups to save the image.");
         }
@@ -256,7 +258,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
         link.download = 'my-korean-name.png';
         link.click();
         URL.revokeObjectURL(url);
-        setShareMessage('');
+        showFeedback('Downloading!');
       }
     } catch (err) {
       console.error('Download failed:', err);
@@ -299,13 +301,12 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'My Korean Name!' });
-        setShareMessage('');
       } else {
         showFeedback('Share not supported. Try copying!');
       }
     } catch (err) {
       console.error('Share failed:', err);
-      setShareMessage('Share failed. Please try again.');
+      showFeedback('Share failed. Please try again.');
     } finally {
       setIsSharing(false);
     }
@@ -363,11 +364,11 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
         {isMobile ? (
           <div className="space-y-3">
             <button onClick={handleCopyToClipboard} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-3 rounded-lg font-bold text-white bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:scale-105 transition-transform">
-              <span>{isSharing ? shareMessage || '...' : 'Copy for Instagram Story'}</span>
+              <span>{isSharing && shareMessage ? shareMessage : 'Copy for Instagram Story'}</span>
             </button>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={handleShare} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
-                More Share Options
+                More Options...
               </button>
               <button onClick={handleDownload} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
                 Save to Photos
@@ -381,11 +382,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
             </p>
             <div className="grid grid-cols-3 gap-3">
               <button onClick={handleCopyToClipboard} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Copy for Story">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                </svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
                 <span className="text-xs">Instagram</span>
               </button>
               <button onClick={handleShareToX} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Share on X">
