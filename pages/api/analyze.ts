@@ -1,13 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// --- Function to get Google Credentials ---
+// --- Initialize Clients ---
 function getGoogleCredentials() {
   if (process.env.GOOGLE_CREDENTIALS_JSON) {
     try {
-      const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
-      return { credentials };
+      return { credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON) };
     } catch (e) {
       console.error("Failed to parse GOOGLE_CREDENTIALS_JSON:", e);
       return {};
@@ -15,18 +14,37 @@ function getGoogleCredentials() {
   }
   return {};
 }
-
-// --- Initialize Clients ---
 const visionClient = new ImageAnnotatorClient(getGoogleCredentials());
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_ANON_KEY!
 );
 
-// --- API Configuration ---
-export const config = {
-  api: { bodyParser: { sizeLimit: '4mb' } },
-};
+// --- 1. RATE LIMITER FUNCTION using Supabase ---
+async function checkRateLimit(ip: string, db: SupabaseClient): Promise<boolean> {
+  const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+
+  const { error, count } = await db
+    .from('api_logs')
+    .select('*', { count: 'exact', head: true })
+    .eq('ip_address', ip)
+    .gte('created_at', oneMinuteAgo);
+
+  if (error) {
+    console.error("Rate limit check error:", error);
+    return false;
+  }
+
+  if (count !== null && count >= 5) {
+    return false; // Limit exceeded
+  }
+
+  await db.from('api_logs').insert({ ip_address: ip });
+  return true; // Allowed
+}
+
+
+export const config = { api: { bodyParser: { sizeLimit: '4mb' } } };
 
 // --- The Main Handler ---
 export default async function handler(
@@ -37,6 +55,16 @@ export default async function handler(
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
+  const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+  const isAllowed = await checkRateLimit(ip, supabase);
+
+  if (!isAllowed) {
+    return res.status(429).json({ 
+        success: false, 
+        message: "You are trying too fast! Please wait a moment." 
+    });
+  }
+
   try {
     const { image, gender, age } = req.body;
     if (!image || !gender || !age) {
@@ -45,13 +73,9 @@ export default async function handler(
 
     // ★★★ DEBUG MODE SWITCH ★★★
     if (age === '999') {
-      const debugNameId = 'seojun_서준'; 
-      console.log(`🚀 DEBUG MODE: Forcing '${debugNameId}' result.`);
+      const debugNameId = 'seojun_서준';
       const { data: nameData } = await supabase.from('korean_names').select('*').eq('name_id', debugNameId).single();
-      
-      // FIX 1: 'celebData' changed to const
       const { data: celebData } = await supabase.from('celebrities').select('*').eq('name_id', debugNameId).single();
-      
       return res.status(200).json({ success: true, name: nameData, celebrity: celebData || null });
     }
     
@@ -67,15 +91,10 @@ export default async function handler(
     }
 
     const face = faces[0];
-    
-    // vibeTag changed to const
-    const vibeTag = (face.joyLikelihood === 'VERY_LIKELY' || face.joyLikelihood === 'LIKELY') 
-        ? 'friendly'
-        : (face.sorrowLikelihood === 'VERY_LIKELY' || face.sorrowLikelihood === 'LIKELY')
-            ? 'calm'
-            : (face.angerLikelihood === 'VERY_LIKELY' || face.angerLikelihood === 'LIKELY')
-                ? 'cool'
-                : 'friendly'; 
+    let vibeTag = 'friendly';
+    if (face.joyLikelihood === 'VERY_LIKELY' || face.joyLikelihood === 'LIKELY') vibeTag = 'friendly';
+    else if (face.sorrowLikelihood === 'VERY_LIKELY' || face.sorrowLikelihood === 'LIKELY') vibeTag = 'calm';
+    else if (face.angerLikelihood === 'VERY_LIKELY' || face.angerLikelihood === 'LIKELY') vibeTag = 'cool';
 
     const { data: names, error: nameError } = await supabase.from('korean_names').select('*').eq('gender_primary', gender).like('vibe_tags', `%${vibeTag}%`);
     if (nameError) throw nameError;
@@ -84,22 +103,19 @@ export default async function handler(
     }
     
     const recommendedName = names[Math.floor(Math.random() * names.length)];
-    
-    // FIX 2: 'celebrityData' changed to const
     const { data: celebrityData } = await supabase.from('celebrities').select('*').eq('name_id', recommendedName.name_id).limit(1);
-    
-    // FIX 3: 'celebrity' changed to const
     const celebrity = celebrityData && celebrityData.length > 0 ? celebrityData[0] : null;
 
     res.status(200).json({ success: true, name: recommendedName, celebrity: celebrity });
 
-  } catch (error) { 
+  } catch (error: unknown) {
     if (error instanceof Error) {
         console.error('Error in recommendation API:', error.message);
-        res.status(500).json({ success: false, message: `Server error: ${error.message}` });
     } else {
         console.error('An unknown error occurred:', error);
-        res.status(500).json({ success: false, message: 'An unknown error occurred during the recommendation process.' });
     }
+    res.status(500).json({ success: false, message: 'An error occurred during the recommendation process.' });
   }
 }
+
+
