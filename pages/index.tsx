@@ -11,34 +11,24 @@ interface Celebrity {
 interface RecommendationResult {
   name: KoreanName; celebrity: Celebrity | null;
 }
-
-// --- Props Type for InputForm ---
 interface InputFormProps {
-    gender: string | null; 
-    setGender: (gender: string | null) => void;
-    age: string; 
-    setAge: (age: string) => void;
-    photo: File | null; 
-    handlePhotoChange: (e: ChangeEvent<HTMLInputElement>) => void;
-    isLoading: boolean; 
-    message: string; 
-    handleSubmit: () => void;
+    gender: string | null; setGender: (gender: string | null) => void;
+    age: string; setAge: (age: string) => void;
+    photo: File | null; handlePhotoChange: (e: ChangeEvent<HTMLInputElement>) => void;
+    isLoading: boolean; message: string; handleSubmit: () => void;
 }
 
-// Define a more specific type for the htmlToImage library on the window object
 declare global {
-    interface Window {
-        htmlToImage: {
-            toPng: (element: HTMLElement, options?: object) => Promise<string>;
-        };
-    }
+    interface Window { htmlToImage: any; }
+    // This is needed for the advanced clipboard API
+    const ClipboardItem: any;
 }
 
 const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.readAsDataURL(file);
   reader.onload = () => resolve(reader.result as string);
-  reader.onerror = (err) => reject(err);
+  reader.onerror = (error) => reject(error);
 });
 
 // --- Main Component ---
@@ -88,8 +78,7 @@ const Home: NextPage = () => {
       } else {
         setRecommendation({ name: result.name, celebrity: result.celebrity }); setMessage('');
       }
-    } catch (err) {
-      console.error("handleSubmit error:", err);
+    } catch {
       setMessage('Failed to connect to the server. Please try again.');
     } finally {
       setIsLoading(false);
@@ -135,91 +124,94 @@ const InputForm = ({ gender, setGender, age, setAge, photo, handlePhotoChange, i
     );
 };
 
-// --- Result Card Sub-Component with Advanced Share ---
+// --- Result Card Sub-Component with Share System v5 ---
 const ResultCard = ({ recommendation, onReset }: { recommendation: RecommendationResult, onReset: () => void }) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
-    const [shareMessage, setShareMessage] = useState('');
+    const [feedbackMessage, setFeedbackMessage] = useState('');
 
     useEffect(() => {
         setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
     }, []);
 
-    const generateImageBlob = async (): Promise<Blob> => {
-        if (!cardRef.current) throw new Error("Card element not found");
-        if (!window.htmlToImage) throw new Error("html-to-image library not loaded.");
+    const generateImageBlob = async (): Promise<Blob | null> => {
+        if (!cardRef.current || !window.htmlToImage) {
+            console.error("Share function called before library is ready.");
+            return null;
+        }
         const dataUrl = await window.htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 });
-        const blob = await (await fetch(dataUrl)).blob();
-        return blob;
+        return await (await fetch(dataUrl)).blob();
     };
 
-    const handleDownload = async () => {
+    const showFeedback = (msg: string) => {
+        setFeedbackMessage(msg);
+        setTimeout(() => setFeedbackMessage(''), 2500);
+    };
+
+    const handleSaveToPhotos = async () => {
         setIsSharing(true);
-        setShareMessage('Creating image...');
         try {
             const blob = await generateImageBlob();
+            if(!blob) return;
             const url = URL.createObjectURL(blob);
-            if (isMobile) {
-                const newWindow = window.open(url);
-                if (newWindow) {
-                    setShareMessage("Long-press the image to save!");
-                } else {
-                    setShareMessage("Please allow pop-ups to save the image.");
-                }
-            } else {
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = 'my-korean-name.png';
-                link.click();
-                URL.revokeObjectURL(url);
-                setShareMessage('');
-            }
-        } catch (err) {
-            console.error("Download failed:", err);
-            setShareMessage('Failed to create image.');
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'my-korean-name.png';
+            link.click();
+            URL.revokeObjectURL(url);
+             showFeedback('Downloading image!');
+        } catch (error) {
+            console.error('Save failed:', error);
+            showFeedback('Failed to create image.');
         } finally {
-            if(!isMobile) setIsSharing(false);
+            setIsSharing(false);
         }
     };
     
     const handleCopyToClipboard = async () => {
+        if (!navigator.clipboard?.write) {
+            showFeedback('Clipboard API not supported.');
+            return;
+        }
         setIsSharing(true);
-        setShareMessage('Copying to clipboard...');
         try {
             const blob = await generateImageBlob();
-            // This is a type provided by the browser, no need to define it ourselves
-            await navigator.clipboard.write([
-                new ClipboardItem({ 'image/png': blob })
-            ]);
-            setShareMessage('Copied! Now paste it in your Story.');
-        } catch (err) {
-            console.error("Copy failed:", err);
-            setShareMessage('Copy failed. Try saving instead.');
+            if(!blob) return;
+            await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+            showFeedback('Copied! Now open Instagram and paste in your Story.');
+        } catch (error) {
+            console.error("Copy failed:", error);
+            showFeedback('Copy failed. Try saving instead.');
         } finally {
-            setTimeout(() => { setIsSharing(false); setShareMessage(''); }, 2000);
+            setIsSharing(false);
         }
     };
 
     const handleShare = async () => {
         setIsSharing(true);
-        setShareMessage('Preparing to share...');
         try {
             const blob = await generateImageBlob();
+            if(!blob) return;
             const file = new File([blob], 'my-korean-name.png', { type: blob.type });
 
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({ files: [file], title: 'My Korean Name!' });
-                setShareMessage('');
             } else {
-                setShareMessage("Share not supported. Try copying!");
+                showFeedback("Share not supported. Try copying!");
             }
-        } catch (err) {
-            console.error("Share failed:", err);
-            setShareMessage('Share failed. Please try again.');
+        } catch (error) {
+            console.error("Share failed:", error);
+            showFeedback('Share failed. Please try again.');
         } finally {
             setIsSharing(false);
         }
+    };
+
+    const handleShareToX = () => {
+        const text = encodeURIComponent('I found my perfect Korean name! Check it out:');
+        const url = encodeURIComponent(window.location.href);
+        window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`);
     };
 
     return (
@@ -243,24 +235,39 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
                 </div>
             </div>
 
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 space-y-3 relative">
+                {feedbackMessage && <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-kpop-blue text-white text-xs font-bold px-3 py-1 rounded-full animate-fade-in-out">{feedbackMessage}</div>}
+                
                 {isMobile ? (
                     <div className="space-y-3">
                         <button onClick={handleCopyToClipboard} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-3 rounded-lg font-bold text-white bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:scale-105 transition-transform">
-                            <span>{isSharing ? shareMessage || '...' : 'Copy for Instagram Story'}</span>
+                            <span>{isSharing ? '...' : 'Copy for Instagram Story'}</span>
                         </button>
                          <div className="grid grid-cols-2 gap-3">
-                            <button onClick={handleShare} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">Share...</button>
-                            <button onClick={handleDownload} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">Save to Photos</button>
+                            <button onClick={handleShare} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">More Share Options</button>
+                            <button onClick={handleSaveToPhotos} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">Save to Photos</button>
                         </div>
                     </div>
                 ) : (
-                    <button onClick={handleDownload} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-3 rounded-lg font-bold text-white bg-gradient-to-r from-kpop-purple to-kpop-pink hover:scale-105 transition-transform">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                        <span>{isSharing ? shareMessage || 'Creating Image...' : 'Download as Image'}</span>
-                    </button>
+                    <div className="space-y-3">
+                        <p className="text-center text-kpop-silver text-sm font-bold">Share your result!</p>
+                        <div className="grid grid-cols-3 gap-3">
+                            <button onClick={handleCopyToClipboard} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Copy for Story">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                                <span className="text-xs">Instagram</span>
+                            </button>
+                            <button onClick={handleShareToX} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Share on X">
+                                <svg width="24" height="24" viewBox="0 0 1200 1227" fill="white"><path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6902H306.615L611.412 515.685L658.88 583.579L1055.08 1150.31H892.476L569.165 687.854V687.828Z"/></svg>
+                                <span className="text-xs">X / Twitter</span>
+                            </button>
+                             <button onClick={handleSaveOrDownload} disabled={isSharing} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Download Image">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                <span className="text-xs">Download</span>
+                            </button>
+                        </div>
+                    </div>
                 )}
-                 <button onClick={onReset} className="w-full p-2 rounded-lg font-bold text-white/50 bg-transparent hover:bg-white/10 transition-colors text-xs mt-4">
+                 <button onClick={onReset} className="w-full p-2 rounded-lg font-bold text-white/50 bg-transparent hover:bg-white/10 transition-colors text-xs mt-2">
                     Try Another Photo
                 </button>
             </div>
