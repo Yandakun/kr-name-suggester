@@ -38,11 +38,9 @@ declare global {
       toPng: (element: HTMLElement, options?: object) => Promise<string>;
     };
   }
-  // This provides a proper type for the ClipboardItem constructor
-  const ClipboardItem: new (items: Record<string, Blob>) => {
-    readonly types: string[];
-    getType(type: string): Promise<Blob>;
-  };
+  // The ClipboardItem is part of the standard DOM typings,
+  // we just need to make sure our code uses it correctly.
+  // No need to redeclare it here if tsconfig is set up correctly.
 }
 
 const toBase64 = (file: File): Promise<string> =>
@@ -248,9 +246,9 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
       if (isMobile) {
         const newWindow = window.open(url);
         if (newWindow) {
-          setShareMessage("Long-press the image to save!");
+          showFeedback("Long-press the image to save!");
         } else {
-          setShareMessage("Please allow pop-ups to save the image.");
+          showFeedback("Please allow pop-ups to save the image.");
         }
       } else {
         const link = document.createElement('a');
@@ -262,14 +260,14 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
       }
     } catch (err) {
       console.error('Download failed:', err);
-      setShareMessage('Failed to create image.');
+      showFeedback('Failed to create image.');
     } finally {
       if (!isMobile) setIsSharing(false);
     }
   };
 
   const handleCopyToClipboard = async () => {
-    if (!navigator.clipboard?.write) {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
       showFeedback('Clipboard API not supported.');
       return;
     }
@@ -282,7 +280,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
       showFeedback('Copied! Now paste it in your Story.');
     } catch (err) {
       console.error('Copy failed:', err);
-      setShareMessage('Copy failed. Try saving instead.');
+      showFeedback('Copy failed. Try saving instead.');
     } finally {
       setTimeout(() => {
         setIsSharing(false);
@@ -357,15 +355,15 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
       </div>
 
       <div className="mt-6 space-y-3 relative">
-        {feedbackMessage && (<div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-kpop-blue text-white text-xs font-bold px-3 py-1 rounded-full animate-fade-in-out">
-            {feedbackMessage}
+        {shareMessage && (<div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-kpop-blue text-white text-xs font-bold px-3 py-1 rounded-full animate-fade-in-out">
+            {shareMessage}
           </div>
         )}
 
         {isMobile ? (
           <div className="space-y-3">
             <button onClick={handleCopyToClipboard} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-3 rounded-lg font-bold text-white bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:scale-105 transition-transform">
-              <span>{isSharing ? feedbackMessage || '...' : 'Copy for Instagram Story'}</span>
+              <span>{isSharing ? shareMessage || '...' : 'Copy for Instagram Story'}</span>
             </button>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={handleShare} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
