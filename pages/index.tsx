@@ -202,63 +202,75 @@ const InputForm = ({ gender, setGender, age, setAge, photo, handlePhotoChange, i
   );
 };
 
-// --- Result Card Sub-Component with Final Simplified Share System ---
+// --- Result Card Sub-Component with Final Polished Share System ---
 const ResultCard = ({ recommendation, onReset }: { recommendation: RecommendationResult; onReset: () => void; }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
 
-  const generateImageBlob = async (): Promise<Blob | null> => {
+  useEffect(() => {
+    setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
+  }, []);
+
+  const generateImage = async () => {
     if (!cardRef.current || !window.htmlToImage) {
-      console.error('Share function called before library is ready.');
-      return null;
+      throw new Error("Share function called before library is ready.");
     }
-    const dataUrl = await window.htmlToImage.toPng(cardRef.current, {
-      cacheBust: true,
-      pixelRatio: 2,
-    });
-    const blob = await (await fetch(dataUrl)).blob();
-    return blob;
+    return await window.htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 });
   };
 
   const showFeedback = (msg: string) => {
     setShareMessage(msg);
-    setTimeout(() => setShareMessage(''), 2500);
+    setTimeout(() => setShareMessage(''), 3000);
   };
 
   const handleDownload = async () => {
     setIsSharing(true);
     try {
-      const blob = await generateImageBlob();
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'my-korean-name.png';
-      link.click();
-      URL.revokeObjectURL(url);
+      const dataUrl = await generateImage();
+      if (isMobile) {
+        const newWindow = window.open();
+        if(newWindow){
+            newWindow.document.write(`<body style="margin:0; background:black;"><img src="${dataUrl}" alt="My Korean Name" style="width:100%; height:auto;"/></body>`);
+            showFeedback("Long-press the image to save!");
+        } else {
+            showFeedback("Please allow pop-ups to save.");
+        }
+      } else {
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = 'my-korean-name.png';
+        link.click();
+      }
     } catch (err) {
       console.error('Download failed:', err);
       showFeedback('Failed to create image.');
     } finally {
-      setIsSharing(false);
+        // This is the bug fix: we only set isSharing to false on desktop.
+        // On mobile, the user is in a new tab, so we don't want to re-enable buttons.
+      if (!isMobile) {
+        setIsSharing(false);
+      }
     }
   };
-
+  
   const handleShare = async () => {
     setIsSharing(true);
     try {
-      const shareUrl = `${window.location.origin}/result/${recommendation.name.id}`;
-      if (navigator.share) {
-        await navigator.share({
-          title: 'My Korean Name!',
-          text: `I got '${recommendation.name.romaja_rr}' as my Korean name! Check it out:`,
-          url: shareUrl,
-        });
-      } else {
-        navigator.clipboard.writeText(shareUrl);
-        showFeedback('Link Copied to Clipboard!');
-      }
+        const shareUrl = `${window.location.origin}/result/${recommendation.name.id}`;
+        // The universal Web Share API for Mobile
+        if (navigator.share) {
+            await navigator.share({
+                title: 'My Korean Name!',
+                text: `I got '${recommendation.name.romaja_rr}' as my Korean name! Check it out:`,
+                url: shareUrl,
+            });
+        } else {
+            // Fallback for Desktop: Copy URL to clipboard
+            await navigator.clipboard.writeText(shareUrl);
+            showFeedback('URL copied! Share it with your friends.');
+        }
     } catch (err) {
       console.error('Sharing failed:', err);
       showFeedback('Sharing failed. Please try again.');
@@ -305,7 +317,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
       </div>
 
       <div className="mt-6 space-y-3 relative">
-        {shareMessage && (<div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-kpop-blue text-white text-xs font-bold px-3 py-1 rounded-full animate-fade-in-out">
+        {shareMessage && (<div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-kpop-blue text-white text-xs font-bold px-4 py-2 rounded-full animate-fade-in-out whitespace-nowrap">
             {shareMessage}
           </div>
         )}
@@ -316,7 +328,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
                 <span>{isSharing ? '...' : 'Share'}</span>
             </button>
             <button onClick={handleDownload} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
-                Download Image
+                {isMobile ? 'Save to Photos' : 'Download Image'}
             </button>
         </div>
 
@@ -327,7 +339,6 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     </div>
   );
 };
-
 
 // --- Loader Component ---
 const Loader = () => (
