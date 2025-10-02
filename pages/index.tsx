@@ -7,6 +7,7 @@ interface KoreanName {
   name_hangul: string;
   romaja_rr: string;
   meaning_en_desc: string;
+  name_id: string; 
 }
 interface Celebrity {
   id: number;
@@ -247,16 +248,15 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
   const handleShare = async () => {
     setIsSharing(true);
     try {
+      const shareUrl = `${window.location.origin}/result/${recommendation.name.id}`;
       if (navigator.share) {
-        // This is the universal share API for both mobile and supported desktop browsers
         await navigator.share({
           title: 'My Korean Name!',
-          text: 'I found my perfect Korean name on "If I Were a Korean?"!',
-          url: window.location.href,
+          text: `I got '${recommendation.name.romaja_rr}' as my Korean name! Check it out:`,
+          url: shareUrl,
         });
       } else {
-        // Fallback for browsers that do not support the Web Share API
-        navigator.clipboard.writeText(window.location.href);
+        navigator.clipboard.writeText(shareUrl);
         showFeedback('Link Copied to Clipboard!');
       }
     } catch (err) {
@@ -270,7 +270,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
   return (
     <div className="animate-fade-in-up">
       <div ref={cardRef} className="bg-gradient-to-br from-gray-900 via-purple-900 to-black rounded-2xl p-8 text-center">
-        <h2 className="text-kpop-silver text-lg font-semibold">My Korean name is...</h2>
+        <h2 className="text-kpop-silver text-lg font-semibold">Your Korean name is...</h2>
         <p className="text-5xl font-black my-2 text-transparent bg-clip-text bg-gradient-to-r from-kpop-pink via-kpop-purple to-kpop-blue drop-shadow-lg">
           {recommendation.name.romaja_rr}
         </p>
@@ -327,6 +327,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     </div>
   );
 };
+
 
 // --- Loader Component ---
 const Loader = () => (
