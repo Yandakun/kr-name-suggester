@@ -4,12 +4,20 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #10001F; /* A deep purple base */
-  /* This is the corrected line with modern syntax for opacity (#...66) */
-  background-image: radial-gradient(circle at 100% 0%, #ff69b466, transparent 50%),
-                    radial-gradient(circle at 0% 100%, #1e90ff66, transparent 50%);
-  color: white;
-  font-family: 'Poppins', sans-serif;
+/*
+  By wrapping our custom base styles in `@layer base`,
+  we are telling Tailwind CSS to include these styles
+  as part of its default base layer. This is the official,
+  recommended way to add custom base styles and avoids any
+  potential style conflicts or warnings.
+*/
+@layer base {
+  body {
+    background-color: #10001F; /* A deep purple base */
+    background-image: radial-gradient(circle at 100% 0%, hsl(330 100% 71% / 0.4), transparent 50%),
+                      radial-gradient(circle at 0% 100%, hsl(210 100% 56% / 0.4), transparent 50%);
+    color: white;
+    font-family: 'Poppins', sans-serif;
+  }
 }
 
