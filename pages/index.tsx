@@ -31,20 +31,15 @@ interface InputFormProps {
   handleSubmit: () => void;
 }
 
-// Define specific types for global objects to satisfy the linter
+// Define types for global objects that are loaded from external scripts
 declare global {
   interface Window {
     htmlToImage: {
       toPng: (element: HTMLElement, options?: object) => Promise<string>;
     };
   }
-  // This provides a proper type for the ClipboardItem constructor, which exists in modern browsers
-  const ClipboardItem: {
-    new (items: Record<string, Blob>): {
-      readonly types: string[];
-      getType(type: string): Promise<Blob>;
-    };
-  };
+  // ClipboardItem is a standard browser API. Most modern TS configs know it.
+  // We don't need to redeclare it, which was causing the error.
 }
 
 const toBase64 = (file: File): Promise<string> =>
@@ -240,44 +235,42 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
 
   const handleDownload = async () => {
     setIsSharing(true);
-    setShareMessage('Creating image...');
+    showFeedback('Creating image...');
     try {
       const blob = await generateImageBlob();
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      if (isMobile) {
-        const newWindow = window.open(url);
-        if (newWindow) {
-            // No feedback needed here as user interacts with new tab
-        } else {
-          showFeedback("Please allow pop-ups to save the image.");
-        }
-      } else {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'my-korean-name.png';
-        link.click();
-        URL.revokeObjectURL(url);
-        showFeedback('Downloading!');
+      if (!blob) {
+        showFeedback('Image creation failed.');
+        setIsSharing(false);
+        return;
       }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'my-korean-name.png';
+      link.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download failed:', err);
       showFeedback('Failed to create image.');
     } finally {
-      if (!isMobile) setIsSharing(false);
+      setIsSharing(false);
     }
   };
 
   const handleCopyToClipboard = async () => {
-    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
       showFeedback('Clipboard API not supported.');
       return;
     }
     setIsSharing(true);
-    setShareMessage('Copying to clipboard...');
+    showFeedback('Copying to clipboard...');
     try {
       const blob = await generateImageBlob();
-      if (!blob) return;
+      if (!blob) {
+        showFeedback('Copy failed.');
+        setIsSharing(false);
+        return;
+      }
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       showFeedback('Copied! Now paste it in your Story.');
     } catch (err) {
@@ -286,17 +279,20 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     } finally {
       setTimeout(() => {
         setIsSharing(false);
-        setShareMessage('');
       }, 2000);
     }
   };
 
   const handleShare = async () => {
     setIsSharing(true);
-    setShareMessage('Preparing to share...');
+    showFeedback('Preparing to share...');
     try {
       const blob = await generateImageBlob();
-      if (!blob) return;
+      if (!blob) {
+        showFeedback('Share failed.');
+        setIsSharing(false);
+        return;
+      }
       const file = new File([blob], 'my-korean-name.png', { type: blob.type });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -364,7 +360,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
         {isMobile ? (
           <div className="space-y-3">
             <button onClick={handleCopyToClipboard} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-3 rounded-lg font-bold text-white bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:scale-105 transition-transform">
-              <span>{isSharing && shareMessage ? shareMessage : 'Copy for Instagram Story'}</span>
+              <span>{isSharing ? shareMessage || '...' : 'Copy for Instagram Story'}</span>
             </button>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={handleShare} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
