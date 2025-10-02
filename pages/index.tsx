@@ -213,11 +213,17 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
   }, []);
 
-  const generateImage = async () => {
+  const generateImageBlob = async (): Promise<Blob | null> => {
     if (!cardRef.current || !window.htmlToImage) {
-      throw new Error("Share function called before library is ready.");
+      console.error('Share function called before library is ready.');
+      return null;
     }
-    return await window.htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 });
+    const dataUrl = await window.htmlToImage.toPng(cardRef.current, {
+      cacheBust: true,
+      pixelRatio: 2,
+    });
+    const blob = await (await fetch(dataUrl)).blob();
+    return blob;
   };
 
   const showFeedback = (msg: string) => {
@@ -228,49 +234,52 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
   const handleDownload = async () => {
     setIsSharing(true);
     try {
-      const dataUrl = await generateImage();
+      const blob = await generateImageBlob();
+      if (!blob) {
+        showFeedback('Image creation failed.');
+        setIsSharing(false);
+        return;
+      }
+      const url = URL.createObjectURL(blob);
       if (isMobile) {
-        const newWindow = window.open();
-        if(newWindow){
-            newWindow.document.write(`<body style="margin:0; background:black;"><img src="${dataUrl}" alt="My Korean Name" style="width:100%; height:auto;"/></body>`);
-            showFeedback("Long-press the image to save!");
+        const newWindow = window.open(url);
+        if (newWindow) {
+          showFeedback("Long-press the image to save!");
         } else {
-            showFeedback("Please allow pop-ups to save.");
+          showFeedback("Please allow pop-ups to save.");
         }
       } else {
         const link = document.createElement('a');
-        link.href = dataUrl;
+        link.href = url;
         link.download = 'my-korean-name.png';
         link.click();
+        URL.revokeObjectURL(url);
       }
     } catch (err) {
       console.error('Download failed:', err);
       showFeedback('Failed to create image.');
     } finally {
-        // This is the bug fix: we only set isSharing to false on desktop.
-        // On mobile, the user is in a new tab, so we don't want to re-enable buttons.
-      if (!isMobile) {
-        setIsSharing(false);
-      }
+      if (!isMobile) setIsSharing(false);
     }
   };
   
   const handleShare = async () => {
     setIsSharing(true);
     try {
-        const shareUrl = `${window.location.origin}/result/${recommendation.name.id}`;
-        // The universal Web Share API for Mobile
-        if (navigator.share) {
-            await navigator.share({
-                title: 'My Korean Name!',
-                text: `I got '${recommendation.name.romaja_rr}' as my Korean name! Check it out:`,
-                url: shareUrl,
-            });
-        } else {
-            // Fallback for Desktop: Copy URL to clipboard
-            await navigator.clipboard.writeText(shareUrl);
-            showFeedback('URL copied! Share it with your friends.');
-        }
+      const shareUrl = `${window.location.origin}/result/${recommendation.name.id}`;
+
+      // This is the key logic change.
+      // On mobile, use the universal share API. On desktop, copy the link.
+      if (isMobile && navigator.share) {
+        await navigator.share({
+          title: 'My Korean Name!',
+          text: `I got '${recommendation.name.romaja_rr}' as my Korean name! Check it out:`,
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        showFeedback('URL successfully copied. Share it with your friends!');
+      }
     } catch (err) {
       console.error('Sharing failed:', err);
       showFeedback('Sharing failed. Please try again.');
