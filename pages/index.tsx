@@ -39,7 +39,8 @@ declare global {
     };
   }
   // ClipboardItem is a standard browser API. Most modern TS configs know it.
-  // We don't need to redeclare it, which was causing the error.
+  // We remove the redeclaration which was causing the build error.
+  // The runtime check 'typeof ClipboardItem' handles browsers that might not have it.
 }
 
 const toBase64 = (file: File): Promise<string> =>
@@ -238,11 +239,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     showFeedback('Creating image...');
     try {
       const blob = await generateImageBlob();
-      if (!blob) {
-        showFeedback('Image creation failed.');
-        setIsSharing(false);
-        return;
-      }
+      if (!blob) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -266,11 +263,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     showFeedback('Copying to clipboard...');
     try {
       const blob = await generateImageBlob();
-      if (!blob) {
-        showFeedback('Copy failed.');
-        setIsSharing(false);
-        return;
-      }
+      if (!blob) return;
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       showFeedback('Copied! Now paste it in your Story.');
     } catch (err) {
@@ -279,6 +272,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     } finally {
       setTimeout(() => {
         setIsSharing(false);
+        setShareMessage('');
       }, 2000);
     }
   };
@@ -288,11 +282,7 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     showFeedback('Preparing to share...');
     try {
       const blob = await generateImageBlob();
-      if (!blob) {
-        showFeedback('Share failed.');
-        setIsSharing(false);
-        return;
-      }
+      if (!blob) return;
       const file = new File([blob], 'my-korean-name.png', { type: blob.type });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
