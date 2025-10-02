@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 // --- Initialize Clients ---
 function getGoogleCredentials() {
@@ -20,30 +20,6 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY!
 );
 
-// --- 1. RATE LIMITER FUNCTION using Supabase ---
-async function checkRateLimit(ip: string, db: SupabaseClient): Promise<boolean> {
-  const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
-
-  const { error, count } = await db
-    .from('api_logs')
-    .select('*', { count: 'exact', head: true })
-    .eq('ip_address', ip)
-    .gte('created_at', oneMinuteAgo);
-
-  if (error) {
-    console.error("Rate limit check error:", error);
-    return false;
-  }
-
-  if (count !== null && count >= 5) {
-    return false; // Limit exceeded
-  }
-
-  await db.from('api_logs').insert({ ip_address: ip });
-  return true; // Allowed
-}
-
-
 export const config = { api: { bodyParser: { sizeLimit: '4mb' } } };
 
 // --- The Main Handler ---
@@ -53,16 +29,6 @@ export default async function handler(
 ) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
-  }
-
-  const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
-  const isAllowed = await checkRateLimit(ip, supabase);
-
-  if (!isAllowed) {
-    return res.status(429).json({ 
-        success: false, 
-        message: "You are trying too fast! Please wait a moment." 
-    });
   }
 
   try {
@@ -79,7 +45,7 @@ export default async function handler(
       return res.status(200).json({ success: true, name: nameData, celebrity: celebData || null });
     }
     
-    // --- Normal Logic ---
+    // --- AI Analysis Logic ---
     const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
     const [result] = await visionClient.annotateImage({
       image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }],
@@ -96,7 +62,22 @@ export default async function handler(
     else if (face.sorrowLikelihood === 'VERY_LIKELY' || face.sorrowLikelihood === 'LIKELY') vibeTag = 'calm';
     else if (face.angerLikelihood === 'VERY_LIKELY' || face.angerLikelihood === 'LIKELY') vibeTag = 'cool';
 
-    const { data: names, error: nameError } = await supabase.from('korean_names').select('*').eq('gender_primary', gender).like('vibe_tags', `%${vibeTag}%`);
+    // --- NEW: Dynamic Query Building for Gender ---
+    let query = supabase
+      .from('korean_names')
+      .select('*')
+      .like('vibe_tags', `%${vibeTag}%`);
+
+    // If gender is M or F, query the 'gender_primary' column.
+    // If gender is U, query the 'unisex' column for 'Y'.
+    if (gender === 'M' || gender === 'F') {
+      query = query.eq('gender_primary', gender);
+    } else if (gender === 'U') {
+      query = query.eq('unisex', 'Y');
+    }
+
+    const { data: names, error: nameError } = await query;
+
     if (nameError) throw nameError;
     if (!names || names.length === 0) {
       return res.status(404).json({ success: false, message: "Sorry, we couldn't find a matching name for your vibe." });
@@ -117,5 +98,4 @@ export default async function handler(
     res.status(500).json({ success: false, message: 'An error occurred during the recommendation process.' });
   }
 }
-
 
