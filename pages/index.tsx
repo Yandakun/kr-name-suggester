@@ -31,15 +31,12 @@ interface InputFormProps {
   handleSubmit: () => void;
 }
 
-// Define types for global objects that are loaded from external scripts
 declare global {
   interface Window {
     htmlToImage: {
       toPng: (element: HTMLElement, options?: object) => Promise<string>;
     };
   }
-  // This is a built-in browser API. We don't need to redeclare it,
-  // which was causing the build error. The runtime check handles everything.
 }
 
 const toBase64 = (file: File): Promise<string> =>
@@ -204,16 +201,11 @@ const InputForm = ({ gender, setGender, age, setAge, photo, handlePhotoChange, i
   );
 };
 
-// --- Result Card Sub-Component with Advanced Share ---
+// --- Result Card Sub-Component with Final Simplified Share System ---
 const ResultCard = ({ recommendation, onReset }: { recommendation: RecommendationResult; onReset: () => void; }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
-
-  useEffect(() => {
-    setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
-  }, []);
 
   const generateImageBlob = async (): Promise<Blob | null> => {
     if (!cardRef.current || !window.htmlToImage) {
@@ -235,7 +227,6 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
 
   const handleDownload = async () => {
     setIsSharing(true);
-    showFeedback('Creating image...');
     try {
       const blob = await generateImageBlob();
       if (!blob) return;
@@ -253,54 +244,27 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     }
   };
 
-  const handleCopyToClipboard = async () => {
-    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
-      showFeedback('Clipboard API not supported.');
-      return;
-    }
-    setIsSharing(true);
-    showFeedback('Copying to clipboard...');
-    try {
-      const blob = await generateImageBlob();
-      if (!blob) return;
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      showFeedback('Copied! Now paste it in your Story.');
-    } catch (err) {
-      console.error('Copy failed:', err);
-      showFeedback('Copy failed. Try saving instead.');
-    } finally {
-      setTimeout(() => {
-        setIsSharing(false);
-        setShareMessage('');
-      }, 2000);
-    }
-  };
-
   const handleShare = async () => {
     setIsSharing(true);
-    showFeedback('Preparing to share...');
     try {
-      const blob = await generateImageBlob();
-      if (!blob) return;
-      const file = new File([blob], 'my-korean-name.png', { type: blob.type });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'My Korean Name!' });
+      if (navigator.share) {
+        // This is the universal share API for both mobile and supported desktop browsers
+        await navigator.share({
+          title: 'My Korean Name!',
+          text: 'I found my perfect Korean name on "If I Were a Korean?"!',
+          url: window.location.href,
+        });
       } else {
-        showFeedback('Share not supported. Try copying!');
+        // Fallback for browsers that do not support the Web Share API
+        navigator.clipboard.writeText(window.location.href);
+        showFeedback('Link Copied to Clipboard!');
       }
     } catch (err) {
-      console.error('Share failed:', err);
-      showFeedback('Share failed. Please try again.');
+      console.error('Sharing failed:', err);
+      showFeedback('Sharing failed. Please try again.');
     } finally {
       setIsSharing(false);
     }
-  };
-
-  const handleShareToX = () => {
-    const text = encodeURIComponent('I found my perfect Korean name! Check it out:');
-    const url = encodeURIComponent(window.location.href);
-    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`);
   };
 
   return (
@@ -345,48 +309,17 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
             {shareMessage}
           </div>
         )}
-
-        {isMobile ? (
-          <div className="space-y-3">
-            <button onClick={handleCopyToClipboard} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-3 rounded-lg font-bold text-white bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:scale-105 transition-transform">
-              <span>{isSharing ? shareMessage || '...' : 'Copy for Instagram Story'}</span>
+        
+        <div className="grid grid-cols-2 gap-3">
+            <button onClick={handleShare} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-2 rounded-lg font-bold text-white bg-kpop-purple hover:scale-105 transition-transform">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                <span>{isSharing ? '...' : 'Share'}</span>
             </button>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={handleShare} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
-                More Options...
-              </button>
-              <button onClick={handleDownload} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
-                Save to Photos
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-center text-kpop-silver text-sm font-bold">
-              Share your result!
-            </p>
-            <div className="grid grid-cols-3 gap-3">
-              <button onClick={handleCopyToClipboard} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Copy for Story">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
-                <span className="text-xs">Instagram</span>
-              </button>
-              <button onClick={handleShareToX} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Share on X">
-                <svg width="24" height="24" viewBox="0 0 1200 1227" fill="white">
-                  <path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6902H306.615L611.412 515.685L658.88 583.579L1055.08 1150.31H892.476L569.165 687.854V687.828Z"/>
-                </svg>
-                <span className="text-xs">X / Twitter</span>
-              </button>
-              <button onClick={handleDownload} disabled={isSharing} className="p-3 flex flex-col gap-1 justify-center items-center rounded-lg bg-white/20 hover:bg-white/30" title="Download Image">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                <span className="text-xs">Download</span>
-              </button>
-            </div>
-          </div>
-        )}
+            <button onClick={handleDownload} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
+                Download Image
+            </button>
+        </div>
+
         <button onClick={onReset} className="w-full p-2 rounded-lg font-bold text-white/50 bg-transparent hover:bg-white/10 transition-colors text-xs mt-2">
           Try Another Photo
         </button>
