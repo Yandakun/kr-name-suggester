@@ -50,27 +50,26 @@ export default async function handler(
       return res.status(400).json({ success: false, message: 'Image, gender, and age are required.' });
     }
 
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    // ★  DEBUG MODE SWITCH (RESTORED!)      ★
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★★★ DEBUG MODE SWITCH ★★★
     if (age === '999') {
-      const debugNameId = 'seojun_서준'; 
-      console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugNameId}' result.`);
+      const debugFullNameId = 'seojun_서준_01'; 
+      console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugFullNameId}' result.`);
       
-      const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugNameId).single();
+      const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
       if(nameError || !nameData) {
-        console.error("Debug name data error:", nameError);
-        return res.status(404).json({ success: false, message: `Debug name data for '${debugNameId}' not found.` });
+        return res.status(404).json({ success: false, message: `Debug name data for '${debugFullNameId}' not found in DB.` });
       }
 
-      const { data: celebData, error: celebError } = await supabase.from('celebrities').select('*').eq('name_id', debugNameId).single();
+      // The smart mapping logic is now ALSO in the debug mode
+      const baseNameId = debugFullNameId.replace(/_\d+$/, '');
+      const { data: celebData, error: celebError } = await supabase.from('celebrities').select('*').eq('name_id', baseNameId).single();
       if(celebError) {
-          console.warn(`Could not find celebrity debug data for '${debugNameId}', but that's okay.`, celebError.message);
+          console.warn(`Could not find celebrity debug data for '${baseNameId}', but that's okay.`);
       }
 
       return res.status(200).json({ success: true, name: nameData, celebrity: celebData || null });
     }
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★★★ END DEBUG MODE ★★★
     
     // --- Normal Logic ---
     const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
@@ -95,6 +94,8 @@ export default async function handler(
     
     const recommendedName = names[Math.floor(Math.random() * names.length)];
 
+    // --- UNIVERSAL SMART MAPPING LOGIC ---
+    // This logic now applies to ALL recommendations, not just the debug mode.
     const fullNameId = recommendedName.name_id;
     const baseNameId = fullNameId.replace(/_\d+$/, '');
 
