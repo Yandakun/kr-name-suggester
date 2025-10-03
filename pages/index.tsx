@@ -1,5 +1,5 @@
 import type { NextPage } from 'next';
-import { useState, ChangeEvent, useRef, useEffect } from 'react';
+import { useState, ChangeEvent } from 'react'; // Unused imports (useRef, useEffect) have been removed.
 
 // --- Type Definitions ---
 interface KoreanName {
@@ -7,11 +7,8 @@ interface KoreanName {
   name_hangul: string;
   romaja_rr: string;
   meaning_en_desc: string;
-  name_id: string; 
 }
 interface Celebrity {
-  id: number;
-  name_id: string;
   celebrity_name_romaja: string;
   celebrity_group_or_profession: string;
   image_url: string;
@@ -32,14 +29,6 @@ interface InputFormProps {
   handleSubmit: () => void;
 }
 
-declare global {
-  interface Window {
-    htmlToImage: {
-      toPng: (element: HTMLElement, options?: object) => Promise<string>;
-    };
-  }
-}
-
 const toBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -56,21 +45,6 @@ const Home: NextPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
-
-  useEffect(() => {
-    document.title = 'If I Were a Korean?';
-    const scriptId = 'html-to-image-script';
-    if (document.getElementById(scriptId)) return;
-    const script = document.createElement('script');
-    script.id = scriptId;
-    script.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js';
-    script.async = true;
-    document.head.appendChild(script);
-    return () => {
-      const existingScript = document.getElementById(scriptId);
-      if (existingScript) document.head.removeChild(existingScript);
-    };
-  }, []);
 
   const handlePhotoChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -202,95 +176,11 @@ const InputForm = ({ gender, setGender, age, setAge, photo, handlePhotoChange, i
   );
 };
 
-// --- Result Card Sub-Component with Final Polished Share System ---
+// --- Result Card Sub-Component ---
 const ResultCard = ({ recommendation, onReset }: { recommendation: RecommendationResult; onReset: () => void; }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [isSharing, setIsSharing] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [shareMessage, setShareMessage] = useState('');
-
-  useEffect(() => {
-    setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
-  }, []);
-
-  const generateImageBlob = async (): Promise<Blob | null> => {
-    if (!cardRef.current || !window.htmlToImage) {
-      console.error('Share function called before library is ready.');
-      return null;
-    }
-    const dataUrl = await window.htmlToImage.toPng(cardRef.current, {
-      cacheBust: true,
-      pixelRatio: 2,
-    });
-    const blob = await (await fetch(dataUrl)).blob();
-    return blob;
-  };
-
-  const showFeedback = (msg: string) => {
-    setShareMessage(msg);
-    setTimeout(() => setShareMessage(''), 3000);
-  };
-
-  const handleDownload = async () => {
-    setIsSharing(true);
-    try {
-      const blob = await generateImageBlob();
-      if (!blob) {
-        showFeedback('Image creation failed.');
-        setIsSharing(false);
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      if (isMobile) {
-        const newWindow = window.open(url);
-        if (newWindow) {
-          showFeedback("Long-press the image to save!");
-        } else {
-          showFeedback("Please allow pop-ups to save.");
-        }
-      } else {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'my-korean-name.png';
-        link.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch (err) {
-      console.error('Download failed:', err);
-      showFeedback('Failed to create image.');
-    } finally {
-      if (!isMobile) setIsSharing(false);
-    }
-  };
-  
-  const handleShare = async () => {
-    setIsSharing(true);
-    try {
-      const shareUrl = `${window.location.origin}/result/${recommendation.name.id}`;
-
-      // This is the key logic change.
-      // On mobile, use the universal share API. On desktop, copy the link.
-      if (isMobile && navigator.share) {
-        await navigator.share({
-          title: 'My Korean Name!',
-          text: `I got '${recommendation.name.romaja_rr}' as my Korean name! Check it out:`,
-          url: shareUrl,
-        });
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        showFeedback('URL successfully copied. Share it with your friends!');
-      }
-    } catch (err) {
-      console.error('Sharing failed:', err);
-      showFeedback('Sharing failed. Please try again.');
-    } finally {
-      setIsSharing(false);
-    }
-  };
-
   return (
     <div className="animate-fade-in-up">
-      <div ref={cardRef} className="bg-gradient-to-br from-gray-900 via-purple-900 to-black rounded-2xl p-8 text-center">
+      <div className="bg-gradient-to-br from-gray-900 via-purple-900 to-black rounded-2xl p-8 text-center">
         <h2 className="text-kpop-silver text-lg font-semibold">Your Korean name is...</h2>
         <p className="text-5xl font-black my-2 text-transparent bg-clip-text bg-gradient-to-r from-kpop-pink via-kpop-purple to-kpop-blue drop-shadow-lg">
           {recommendation.name.romaja_rr}
@@ -309,8 +199,12 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
                 Famous namesake
               </h3>
               <div className="flex items-center gap-4 mt-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={recommendation.celebrity.image_url} alt={recommendation.celebrity.celebrity_name_romaja} width={80} height={80} className="w-20 h-20 rounded-full object-cover border-2 border-kpop-pink"/>
+                <img 
+                  src={recommendation.celebrity.image_url} 
+                  alt={recommendation.celebrity.celebrity_name_romaja} 
+                  width={80} height={80} 
+                  className="w-20 h-20 rounded-full object-cover border-2 border-kpop-pink"
+                />
                 <div>
                   <p className="font-bold text-lg">
                     {recommendation.celebrity.celebrity_name_romaja}
@@ -324,24 +218,8 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
           )}
         </div>
       </div>
-
-      <div className="mt-6 space-y-3 relative">
-        {shareMessage && (<div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-kpop-blue text-white text-xs font-bold px-4 py-2 rounded-full animate-fade-in-out whitespace-nowrap">
-            {shareMessage}
-          </div>
-        )}
-        
-        <div className="grid grid-cols-2 gap-3">
-            <button onClick={handleShare} disabled={isSharing} className="w-full p-4 flex items-center justify-center gap-2 rounded-lg font-bold text-white bg-kpop-purple hover:scale-105 transition-transform">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-                <span>{isSharing ? '...' : 'Share'}</span>
-            </button>
-            <button onClick={handleDownload} disabled={isSharing} className="w-full p-3 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30">
-                {isMobile ? 'Save to Photos' : 'Download Image'}
-            </button>
-        </div>
-
-        <button onClick={onReset} className="w-full p-2 rounded-lg font-bold text-white/50 bg-transparent hover:bg-white/10 transition-colors text-xs mt-2">
+      <div className="mt-6">
+        <button onClick={onReset} className="w-full p-4 rounded-lg font-bold text-white bg-white/20 hover:bg-white/30 transition-colors">
           Try Another Photo
         </button>
       </div>
