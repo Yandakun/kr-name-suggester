@@ -50,11 +50,9 @@ export default async function handler(
       return res.status(400).json({ success: false, message: 'Image, gender, and age are required.' });
     }
 
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    // ★  DEBUG MODE SWITCH (Updated to Hajun) ★
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★★★ DEBUG MODE SWITCH ★★★
     if (age === '999') {
-      const debugNameId = 'hajun_하준_01'; // Switched to 'hajun'
+      const debugNameId = 'hajun_하준_01'; 
       console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugNameId}' result.`);
       
       const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugNameId).single();
@@ -71,7 +69,7 @@ export default async function handler(
 
       return res.status(200).json({ success: true, name: nameData, celebrity: celebData || null });
     }
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★★★ END DEBUG MODE ★★★
     
     // --- Normal Logic ---
     const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
@@ -88,30 +86,25 @@ export default async function handler(
     else if (face.sorrowLikelihood === 'VERY_LIKELY' || face.sorrowLikelihood === 'LIKELY') vibeTag = 'calm';
     else if (face.angerLikelihood === 'VERY_LIKELY' || face.angerLikelihood === 'LIKELY') vibeTag = 'cool';
 
-    const { data: names, error: nameError } = await supabase.from('korean_names').select('*').eq('gender_primary', gender).like('vibe_tags', `%${vibeTag}%`);
+    const query = supabase.from('korean_names').select('*').like('vibe_tags', `%${vibeTag}%`);
+    if (gender === 'U') {
+        query.eq('gender_primary', 'U');
+    } else {
+        query.in('gender_primary', [gender, 'U']);
+    }
+    const { data: names, error: nameError } = await query;
     if (nameError) throw nameError;
     if (!names || names.length === 0) {
       return res.status(404).json({ success: false, message: "Sorry, we couldn't find a matching name for your vibe." });
     }
     
     const recommendedName = names[Math.floor(Math.random() * names.length)];
-
     const fullNameId = recommendedName.name_id;
     const baseNameId = fullNameId.replace(/_\d+$/, '');
-
-    const { data: celebrityData } = await supabase
-      .from('celebrities')
-      .select('*')
-      .eq('name_id', baseNameId)
-      .limit(1);
-    
+    const { data: celebrityData } = await supabase.from('celebrities').select('*').eq('name_id', baseNameId).limit(1);
     const celebrity = celebrityData && celebrityData.length > 0 ? celebrityData[0] : null;
 
-    res.status(200).json({ 
-        success: true, 
-        name: recommendedName,
-        celebrity: celebrity
-    });
+    res.status(200).json({ success: true, name: recommendedName, celebrity: celebrity });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
