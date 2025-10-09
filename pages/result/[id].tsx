@@ -21,7 +21,7 @@ interface Celebrity {
 }
 interface RecommendationResult {
   name: KoreanName;
-  celebrity: Celebrity | null;
+  celebrities: Celebrity[]; // Expect an array now
 }
 
 interface ResultPageProps {
@@ -35,8 +35,6 @@ const ResultPage: NextPage<ResultPageProps> = ({ recommendation }) => {
         window.location.href = '/';
     };
 
-    // --- THIS IS THE CRITICAL FIX ---
-    // If the "mannequin" (recommendation) is empty, show a "not found" message.
     if (!recommendation) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen text-center p-4">
@@ -52,7 +50,6 @@ const ResultPage: NextPage<ResultPageProps> = ({ recommendation }) => {
         )
     }
 
-    // Only if recommendation exists, we try to render the card.
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 font-sans">
              <Head>
@@ -97,16 +94,18 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         return { props: { recommendation: null } };
     }
     
+    // --- THIS IS THE CRITICAL FIX ---
+    // Fetch ALL celebrities that match the base name_id
     const baseNameId = nameData.name_id.replace(/_\d+$/, '');
     const { data: celebData } = await supabase
-        .from('celebrities')
-        .select('*')
-        .eq('name_id', baseNameId)
-        .single();
+      .from('celebrities')
+      .select('*')
+      .like('name_id', `${baseNameId}%`);
     
+    // Construct the final object with the correct structure
     const recommendation = {
         name: nameData,
-        celebrity: celebData || null
+        celebrities: celebData || [] // Ensure it's always an array
     };
 
     return {

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 
 // --- Type Definitions ---
 interface KoreanName {
@@ -17,7 +17,7 @@ interface Celebrity {
 }
 interface RecommendationResult {
   name: KoreanName;
-  celebrity: Celebrity | null;
+  celebrities: Celebrity[]; // Expect an array
 }
 interface ResultCardProps {
     recommendation: RecommendationResult;
@@ -30,18 +30,16 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
   const cardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
+  }, []);
 
   const generateImageBlob = async (): Promise<Blob | null> => {
-    if (!cardRef.current || !window.htmlToImage) {
-      console.error('Share function called before library is ready.');
-      return null;
-    }
-    const dataUrl = await window.htmlToImage.toPng(cardRef.current, {
-      cacheBust: true,
-      pixelRatio: 2,
-    });
-    const blob = await (await fetch(dataUrl)).blob();
-    return blob;
+    if (!cardRef.current || !window.htmlToImage) { return null; }
+    const dataUrl = await window.htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 });
+    return await (await fetch(dataUrl)).blob();
   };
 
   const showFeedback = (msg: string) => {
@@ -61,7 +59,6 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
       link.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Download failed:', err);
       showFeedback('Failed to create image.');
     } finally {
       setIsSharing(false);
@@ -83,8 +80,7 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
         showFeedback('Link Copied to Clipboard!');
       }
     } catch (err) {
-      console.error('Sharing failed:', err);
-      showFeedback('Sharing failed. Please try again.');
+      showFeedback('Sharing failed.');
     } finally {
       setIsSharing(false);
     }
@@ -107,22 +103,26 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
             <h3 className="font-bold text-kpop-silver tracking-wider">Meaning</h3>
             <p className="text-white/80">{recommendation.name.meaning_en_desc}</p>
           </div>
-          {recommendation.celebrity && (
+          {recommendation.celebrities && recommendation.celebrities.length > 0 && (
             <div>
               <h3 className="font-bold text-kpop-silver tracking-wider">
-                Famous namesake
+                Famous namesakes
               </h3>
-              <div className="flex items-center gap-4 mt-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={recommendation.celebrity.image_url} alt={recommendation.celebrity.celebrity_name_romaja} width={80} height={80} className="w-20 h-20 rounded-full object-cover border-2 border-kpop-pink"/>
-                <div>
-                  <p className="font-bold text-lg">
-                    {recommendation.celebrity.celebrity_name_romaja}
-                  </p>
-                  <p className="text-white/80">
-                    {recommendation.celebrity.celebrity_group_or_profession}
-                  </p>
-                </div>
+              <div className="space-y-4 mt-2">
+                {recommendation.celebrities.map((celeb) => (
+                  <div key={celeb.id} className="flex items-center gap-4">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={celeb.image_url} alt={celeb.celebrity_name_romaja} width={80} height={80} className="w-16 h-16 rounded-full object-cover border-2 border-kpop-pink"/>
+                    <div>
+                      <p className="font-bold text-lg">
+                        {celeb.celebrity_name_romaja}
+                      </p>
+                      <p className="text-white/80 text-sm">
+                        {celeb.celebrity_group_or_profession}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

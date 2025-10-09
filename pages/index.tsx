@@ -206,8 +206,8 @@ const InputForm = ({ gender, setGender, age, setAge, photo, handlePhotoChange, i
 const ResultCard = ({ recommendation, onReset }: { recommendation: RecommendationResult; onReset: () => void; }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
