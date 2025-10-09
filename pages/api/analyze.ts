@@ -50,26 +50,27 @@ export default async function handler(
       return res.status(400).json({ success: false, message: 'Image, gender, and age are required.' });
     }
 
-    // ★★★ DEBUG MODE SWITCH ★★★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★  DEBUG MODE SWITCH (Updated to Jisoo)   ★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     if (age === '999') {
-      const debugNameId = 'hajun_하준_01'; 
+      const debugNameId = 'jisoo_지수_01'; // Switched to 'jisoo'
       console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugNameId}' result.`);
       
       const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugNameId).single();
       if(nameError || !nameData) {
-        console.error("Debug name data error:", nameError);
         return res.status(404).json({ success: false, message: `Debug name data for '${debugNameId}' not found in DB.` });
       }
 
       const baseNameId = debugNameId.replace(/_\d+$/, '');
-      const { data: celebData, error: celebError } = await supabase.from('celebrities').select('*').eq('name_id', baseNameId).single();
+      const { data: celebData, error: celebError } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
       if(celebError) {
           console.warn(`Could not find celebrity debug data for '${baseNameId}', but that's okay.`);
       }
 
-      return res.status(200).json({ success: true, name: nameData, celebrity: celebData || null });
+      return res.status(200).json({ success: true, name: nameData, celebrities: celebData || [] });
     }
-    // ★★★ END DEBUG MODE ★★★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     
     // --- Normal Logic ---
     const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
@@ -99,12 +100,15 @@ export default async function handler(
     }
     
     const recommendedName = names[Math.floor(Math.random() * names.length)];
-    const fullNameId = recommendedName.name_id;
-    const baseNameId = fullNameId.replace(/_\d+$/, '');
-    const { data: celebrityData } = await supabase.from('celebrities').select('*').eq('name_id', baseNameId).limit(1);
-    const celebrity = celebrityData && celebrityData.length > 0 ? celebrityData[0] : null;
-
-    res.status(200).json({ success: true, name: recommendedName, celebrity: celebrity });
+    
+    const baseNameId = recommendedName.name_id.replace(/_\d+$/, '');
+    const { data: celebrityData } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
+    
+    res.status(200).json({ 
+        success: true, 
+        name: recommendedName,
+        celebrities: celebrityData || []
+    });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
