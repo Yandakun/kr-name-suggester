@@ -50,9 +50,11 @@ export default async function handler(
       return res.status(400).json({ success: false, message: 'Image, gender, and age are required.' });
     }
 
-    // ★★★ DEBUG MODE SWITCH (NOW WITH SMART MAPPING!) ★★★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★  DEBUG MODE SWITCH (NOW WITH SMART MAPPING!)
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     if (age === '999') {
-      const debugFullNameId = 'seojun_서준_01'; 
+      const debugFullNameId = 'jisoo_지수_01'; // Switched to 'jisoo' as requested
       console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugFullNameId}' result.`);
       
       const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
@@ -69,13 +71,14 @@ export default async function handler(
 
       return res.status(200).json({ success: true, name: nameData, celebrities: celebData || [] });
     }
-    // ★★★ END DEBUG MODE ★★★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     
     // --- Normal Logic ---
     const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
     const [result] = await visionClient.annotateImage({
       image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }],
     });
+
     const faces = result.faceAnnotations;
     if (!faces || faces.length !== 1) {
       return res.status(400).json({ success: false, message: `Expected 1 face, but found ${faces?.length || 0}.` });
