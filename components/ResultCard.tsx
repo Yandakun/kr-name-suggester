@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 
 // --- Type Definitions ---
 interface KoreanName {
@@ -30,16 +30,18 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
   const cardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
-  }, []);
 
   const generateImageBlob = async (): Promise<Blob | null> => {
-    if (!cardRef.current || !window.htmlToImage) { return null; }
-    const dataUrl = await window.htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 });
-    return await (await fetch(dataUrl)).blob();
+    if (!cardRef.current || !window.htmlToImage) {
+      console.error('Share function called before library is ready.');
+      return null;
+    }
+    const dataUrl = await window.htmlToImage.toPng(cardRef.current, {
+      cacheBust: true,
+      pixelRatio: 2,
+    });
+    const blob = await (await fetch(dataUrl)).blob();
+    return blob;
   };
 
   const showFeedback = (msg: string) => {
@@ -58,7 +60,7 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
       link.download = 'my-korean-name.png';
       link.click();
       URL.revokeObjectURL(url);
-    } catch (err) {
+    } catch {
       showFeedback('Failed to create image.');
     } finally {
       setIsSharing(false);
@@ -79,7 +81,7 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
         navigator.clipboard.writeText(shareUrl);
         showFeedback('Link Copied to Clipboard!');
       }
-    } catch (err) {
+    } catch {
       showFeedback('Sharing failed.');
     } finally {
       setIsSharing(false);

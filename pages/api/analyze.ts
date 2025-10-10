@@ -50,19 +50,18 @@ export default async function handler(
       return res.status(400).json({ success: false, message: 'Image, gender, and age are required.' });
     }
 
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    // ★  DEBUG MODE SWITCH (Updated to Jisoo)   ★
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★★★ DEBUG MODE SWITCH (NOW WITH SMART MAPPING!) ★★★
     if (age === '999') {
-      const debugNameId = 'jisoo_지수_01'; // Switched to 'jisoo'
-      console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugNameId}' result.`);
+      const debugFullNameId = 'seojun_서준_01'; 
+      console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugFullNameId}' result.`);
       
-      const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugNameId).single();
+      const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
       if(nameError || !nameData) {
-        return res.status(404).json({ success: false, message: `Debug name data for '${debugNameId}' not found in DB.` });
+        return res.status(404).json({ success: false, message: `Debug name data for '${debugFullNameId}' not found in DB.` });
       }
 
-      const baseNameId = debugNameId.replace(/_\d+$/, '');
+      // THE CRITICAL FIX: Apply the SAME smart logic here
+      const baseNameId = debugFullNameId.replace(/_\d+$/, '');
       const { data: celebData, error: celebError } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
       if(celebError) {
           console.warn(`Could not find celebrity debug data for '${baseNameId}', but that's okay.`);
@@ -70,7 +69,7 @@ export default async function handler(
 
       return res.status(200).json({ success: true, name: nameData, celebrities: celebData || [] });
     }
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★★★ END DEBUG MODE ★★★
     
     // --- Normal Logic ---
     const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
@@ -87,13 +86,7 @@ export default async function handler(
     else if (face.sorrowLikelihood === 'VERY_LIKELY' || face.sorrowLikelihood === 'LIKELY') vibeTag = 'calm';
     else if (face.angerLikelihood === 'VERY_LIKELY' || face.angerLikelihood === 'LIKELY') vibeTag = 'cool';
 
-    const query = supabase.from('korean_names').select('*').like('vibe_tags', `%${vibeTag}%`);
-    if (gender === 'U') {
-        query.eq('gender_primary', 'U');
-    } else {
-        query.in('gender_primary', [gender, 'U']);
-    }
-    const { data: names, error: nameError } = await query;
+    const { data: names, error: nameError } = await supabase.from('korean_names').select('*').eq('gender_primary', gender).like('vibe_tags', `%${vibeTag}%`);
     if (nameError) throw nameError;
     if (!names || names.length === 0) {
       return res.status(404).json({ success: false, message: "Sorry, we couldn't find a matching name for your vibe." });

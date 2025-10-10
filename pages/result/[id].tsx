@@ -35,6 +35,8 @@ const ResultPage: NextPage<ResultPageProps> = ({ recommendation }) => {
         window.location.href = '/';
     };
 
+    // --- THIS IS THE CRITICAL FIX ---
+    // If the "mannequin" (recommendation) is empty, show a "not found" message.
     if (!recommendation) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen text-center p-4">
@@ -50,6 +52,7 @@ const ResultPage: NextPage<ResultPageProps> = ({ recommendation }) => {
         )
     }
 
+    // Only if recommendation exists, we try to render the card.
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 font-sans">
              <Head>
