@@ -5,13 +5,17 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // --- Initialize Clients ---
 function getGoogleCredentials() {
   if (process.env.GOOGLE_CREDENTIALS_JSON) {
-    try { return { credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON) }; }
-    catch (e) { console.error("Failed to parse GOOGLE_CREDENTIALS_JSON:", e); return {}; }
+    try {
+      return { credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON) };
+    } catch (e) { console.error("Failed to parse GOOGLE_CREDENTIALS_JSON:", e); return {}; }
   }
   return {};
 }
 const visionClient = new ImageAnnotatorClient(getGoogleCredentials());
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_ANON_KEY!
+);
 
 // --- Rate Limiter ---
 async function checkRateLimit(ip: string, db: SupabaseClient): Promise<boolean> {
@@ -48,19 +52,26 @@ export default async function handler(
 
     let recommendedName;
 
-    // ★★★ DEBUG MODE SWITCH (TARGETING JISOO) ★★★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★  DEBUG MODE SWITCH (RESTORED AND FINALIZED!) ★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     if (age === '999') {
-      const debugFullNameId = 'jisoo_지수_01'; 
-      const { data: nameData } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
-      if (!nameData) return res.status(404).json({ success: false, message: `Debug name data for '${debugFullNameId}' not found.` });
+      const debugFullNameId = 'jisoo_지수_01'; // Target Jisoo for testing
+      console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugFullNameId}' result.`);
+      
+      const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
+      if (nameError || !nameData) {
+        return res.status(404).json({ success: false, message: `Debug name data for '${debugFullNameId}' not found.` });
+      }
       recommendedName = nameData;
     } else {
       // --- Normal Logic ---
       const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
       const [result] = await visionClient.annotateImage({ image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }] });
       const faces = result.faceAnnotations;
-      if (!faces || faces.length !== 1) return res.status(400).json({ success: false, message: `Expected 1 face, but found ${faces?.length || 0}.` });
-      
+      if (!faces || faces.length !== 1) {
+        return res.status(400).json({ success: false, message: `Expected 1 face, but found ${faces?.length || 0}.` });
+      }
       const face = faces[0];
       let vibeTag = 'friendly';
       if (face.joyLikelihood === 'VERY_LIKELY' || face.joyLikelihood === 'LIKELY') vibeTag = 'friendly';
@@ -78,12 +89,12 @@ export default async function handler(
       recommendedName = names[Math.floor(Math.random() * names.length)];
     }
     
-    // --- FOOLPROOF MAPPING LOGIC ---
+    // --- UNIVERSAL SMART MAPPING LOGIC ---
     const baseNameId = recommendedName.name_id.replace(/_\d+$/, '');
     const { data: celebrityData } = await supabase
       .from('celebrities')
       .select('*')
-      .eq('base_name_id', baseNameId); // Now using the new, clean 'base_name_id' column
+      .eq('base_name_id', baseNameId);
     
     res.status(200).json({ 
         success: true, 

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 
 // --- Type Definitions ---
 interface KoreanName {
@@ -10,7 +10,7 @@ interface KoreanName {
 }
 interface Celebrity {
   id: number;
-  name_id: string;
+  base_name_id: string;
   celebrity_name_romaja: string;
   celebrity_group_or_profession: string;
   image_url: string;
@@ -30,18 +30,16 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
   const cardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
+  }, []);
 
   const generateImageBlob = async (): Promise<Blob | null> => {
-    if (!cardRef.current || !window.htmlToImage) {
-      console.error('Share function called before library is ready.');
-      return null;
-    }
-    const dataUrl = await window.htmlToImage.toPng(cardRef.current, {
-      cacheBust: true,
-      pixelRatio: 2,
-    });
-    const blob = await (await fetch(dataUrl)).blob();
-    return blob;
+    if (!cardRef.current || !window.htmlToImage) { return null; }
+    const dataUrl = await window.htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 });
+    return await (await fetch(dataUrl)).blob();
   };
 
   const showFeedback = (msg: string) => {
@@ -71,7 +69,7 @@ const ResultCard = ({ recommendation, onReset, isSharePage = false }: ResultCard
     setIsSharing(true);
     try {
       const shareUrl = `${window.location.origin}/result/${recommendation.name.id}`;
-      if (navigator.share) {
+      if (isMobile && navigator.share) {
         await navigator.share({
           title: 'My Korean Name!',
           text: `I got '${recommendation.name.romaja_rr}' as my Korean name! Check it out:`,

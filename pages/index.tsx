@@ -18,7 +18,7 @@ interface Celebrity {
 }
 interface RecommendationResult {
   name: KoreanName;
-  celebrity: Celebrity | null;
+  celebrities: Celebrity[]; 
 }
 interface InputFormProps {
   gender: string | null;
@@ -58,7 +58,16 @@ const Home: NextPage = () => {
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
 
   useEffect(() => {
+    // Manually set SEO tags and load scripts to avoid Next.js build component errors
     document.title = 'If I Were a Korean?';
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+        metaDesc = document.createElement('meta');
+        metaDesc.setAttribute('name', 'description');
+        document.head.appendChild(metaDesc);
+    }
+    metaDesc.setAttribute('content', 'Find your perfect Korean name based on your face! Upload a photo and get an AI-powered name suggestion.');
+    
     const scriptId = 'html-to-image-script';
     if (document.getElementById(scriptId)) return;
     const script = document.createElement('script');
@@ -66,6 +75,7 @@ const Home: NextPage = () => {
     script.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js';
     script.async = true;
     document.head.appendChild(script);
+    
     return () => {
       const existingScript = document.getElementById(scriptId);
       if (existingScript) document.head.removeChild(existingScript);
@@ -99,7 +109,7 @@ const Home: NextPage = () => {
       if (!response.ok) {
         setMessage(result.message || 'An unknown error occurred.');
       } else {
-        setRecommendation({ name: result.name, celebrity: result.celebrity });
+        setRecommendation({ name: result.name, celebrities: result.celebrities });
         setMessage('');
       }
     } catch (err) {
@@ -202,12 +212,12 @@ const InputForm = ({ gender, setGender, age, setAge, photo, handlePhotoChange, i
   );
 };
 
-// --- Result Card Sub-Component with Final Simplified Share System ---
+// --- Result Card Sub-Component with Final Polished Share System ---
 const ResultCard = ({ recommendation, onReset }: { recommendation: RecommendationResult; onReset: () => void; }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [shareMessage, setShareMessage] = useState('');
   const [isMobile, setIsMobile] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
 
   useEffect(() => {
     setIsMobile(/android/i.test(navigator.userAgent) || /iPad|iPhone|iPod/.test(navigator.userAgent));
@@ -237,25 +247,15 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
       const blob = await generateImageBlob();
       if (!blob) return;
       const url = URL.createObjectURL(blob);
-      if (isMobile) {
-        const newWindow = window.open(url);
-        if (newWindow) {
-          showFeedback("Long-press the image to save!");
-        } else {
-          showFeedback("Please allow pop-ups to save.");
-        }
-        setTimeout(() => setIsSharing(false), 1000);
-      } else {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'my-korean-name.png';
-        link.click();
-        URL.revokeObjectURL(url);
-        setIsSharing(false);
-      }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'my-korean-name.png';
+      link.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download failed:', err);
       showFeedback('Failed to create image.');
+    } finally {
       setIsSharing(false);
     }
   };
@@ -265,16 +265,11 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     try {
       const shareUrl = `${window.location.origin}/result/${recommendation.name.id}`;
       if (isMobile && navigator.share) {
-        const blob = await generateImageBlob();
-        if (blob) {
-          const file = new File([blob], 'my-korean-name.png', { type: blob.type });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: 'My Korean Name!' });
-            setIsSharing(false);
-            return;
-          }
-        }
-        await navigator.share({ title: 'My Korean Name!', text: `I got '${recommendation.name.romaja_rr}' as my Korean name!`, url: shareUrl });
+        await navigator.share({
+          title: 'My Korean Name!',
+          text: `I got '${recommendation.name.romaja_rr}' as my Korean name! Check it out:`,
+          url: shareUrl,
+        });
       } else {
         await navigator.clipboard.writeText(shareUrl);
         showFeedback('URL copied! Share it with your friends.');
@@ -304,22 +299,26 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
             <h3 className="font-bold text-kpop-silver tracking-wider">Meaning</h3>
             <p className="text-white/80">{recommendation.name.meaning_en_desc}</p>
           </div>
-          {recommendation.celebrity && (
+          {recommendation.celebrities && recommendation.celebrities.length > 0 && (
             <div>
               <h3 className="font-bold text-kpop-silver tracking-wider">
-                Famous namesake
+                Famous namesakes
               </h3>
-              <div className="flex items-center gap-4 mt-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={recommendation.celebrity.image_url} alt={recommendation.celebrity.celebrity_name_romaja} width={80} height={80} className="w-20 h-20 rounded-full object-cover border-2 border-kpop-pink"/>
-                <div>
-                  <p className="font-bold text-lg">
-                    {recommendation.celebrity.celebrity_name_romaja}
-                  </p>
-                  <p className="text-white/80">
-                    {recommendation.celebrity.celebrity_group_or_profession}
-                  </p>
-                </div>
+              <div className="space-y-4 mt-2">
+                {recommendation.celebrities.map((celeb) => (
+                  <div key={celeb.id} className="flex items-center gap-4">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={celeb.image_url} alt={celeb.celebrity_name_romaja} width={80} height={80} className="w-16 h-16 rounded-full object-cover border-2 border-kpop-pink"/>
+                    <div>
+                      <p className="font-bold text-lg">
+                        {celeb.celebrity_name_romaja}
+                      </p>
+                      <p className="text-white/80 text-sm">
+                        {celeb.celebrity_group_or_profession}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -349,7 +348,6 @@ const ResultCard = ({ recommendation, onReset }: { recommendation: Recommendatio
     </div>
   );
 };
-
 
 // --- Loader Component ---
 const Loader = () => (

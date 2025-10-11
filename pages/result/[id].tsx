@@ -14,7 +14,7 @@ interface KoreanName {
 }
 interface Celebrity {
   id: number;
-  name_id: string;
+  base_name_id: string;
   celebrity_name_romaja: string;
   celebrity_group_or_profession: string;
   image_url: string;
@@ -74,10 +74,9 @@ const ResultPage: NextPage<ResultPageProps> = ({ recommendation }) => {
 };
 
 
-// --- Server-Side Data Fetching ---
+// --- Server-Side Data Fetching (Corrected Logic) ---
 export const getServerSideProps: GetServerSideProps = async (context) => {
     const { id } = context.params || {};
-
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
@@ -97,18 +96,16 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         return { props: { recommendation: null } };
     }
     
-    // --- THIS IS THE CRITICAL FIX ---
-    // Fetch ALL celebrities that match the base name_id
+    // --- THIS IS THE CRITICAL FIX, AS POINTED OUT BY THE OTHER AI ---
     const baseNameId = nameData.name_id.replace(/_\d+$/, '');
     const { data: celebData } = await supabase
       .from('celebrities')
       .select('*')
-      .like('name_id', `${baseNameId}%`);
+      .eq('base_name_id', baseNameId); // Use 'base_name_id' and '.eq()'
     
-    // Construct the final object with the correct structure
     const recommendation = {
         name: nameData,
-        celebrities: celebData || [] // Ensure it's always an array
+        celebrities: celebData || [] 
     };
 
     return {
