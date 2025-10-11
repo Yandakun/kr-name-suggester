@@ -50,57 +50,46 @@ export default async function handler(
       return res.status(400).json({ success: false, message: 'Image, gender, and age are required.' });
     }
 
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    // ★  DEBUG MODE SWITCH (CORRECTED TO JISOO!) ★
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    let recommendedName;
+
+    // ★★★ DEBUG MODE SWITCH (TARGETING JISOO) ★★★
     if (age === '999') {
-      const debugFullNameId = 'jisoo_지수_01'; // Switched to 'jisoo' as requested
+      const debugFullNameId = 'jisoo_지수_01'; 
       console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugFullNameId}' result.`);
-      
       const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
-      if(nameError || !nameData) {
-        return res.status(404).json({ success: false, message: `Debug name data for '${debugFullNameId}' not found in DB.` });
+      if (nameError || !nameData) {
+        return res.status(404).json({ success: false, message: `Debug name data for '${debugFullNameId}' not found.` });
       }
-
-      const baseNameId = debugFullNameId.replace(/_\d+$/, '');
-      const { data: celebData, error: celebError } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
-      if(celebError) {
-          console.warn(`Could not find celebrity debug data for '${baseNameId}', but that's okay.`);
-      }
-
-      return res.status(200).json({ success: true, name: nameData, celebrities: celebData || [] });
-    }
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    
-    // --- Normal Logic ---
-    const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
-    const [result] = await visionClient.annotateImage({
-      image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }],
-    });
-    const faces = result.faceAnnotations;
-    if (!faces || faces.length !== 1) {
-      return res.status(400).json({ success: false, message: `Expected 1 face, but found ${faces?.length || 0}.` });
-    }
-    const face = faces[0];
-    let vibeTag = 'friendly';
-    if (face.joyLikelihood === 'VERY_LIKELY' || face.joyLikelihood === 'LIKELY') vibeTag = 'friendly';
-    else if (face.sorrowLikelihood === 'VERY_LIKELY' || face.sorrowLikelihood === 'LIKELY') vibeTag = 'calm';
-    else if (face.angerLikelihood === 'VERY_LIKELY' || face.angerLikelihood === 'LIKELY') vibeTag = 'cool';
-
-    const query = supabase.from('korean_names').select('*').like('vibe_tags', `%${vibeTag}%`);
-    if (gender === 'U') {
-        query.eq('gender_primary', 'U');
+      recommendedName = nameData;
     } else {
-        query.in('gender_primary', [gender, 'U']);
-    }
-    const { data: names, error: nameError } = await query;
-    if (nameError) throw nameError;
-    if (!names || names.length === 0) {
-      return res.status(404).json({ success: false, message: "Sorry, we couldn't find a matching name for your vibe." });
+      // --- Normal Logic ---
+      const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
+      const [result] = await visionClient.annotateImage({
+        image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }],
+      });
+      const faces = result.faceAnnotations;
+      if (!faces || faces.length !== 1) {
+        return res.status(400).json({ success: false, message: `Expected 1 face, but found ${faces?.length || 0}.` });
+      }
+      const face = faces[0];
+      let vibeTag = 'friendly';
+      if (face.joyLikelihood === 'VERY_LIKELY' || face.joyLikelihood === 'LIKELY') vibeTag = 'friendly';
+      else if (face.sorrowLikelihood === 'VERY_LIKELY' || face.sorrowLikelihood === 'LIKELY') vibeTag = 'calm';
+      else if (face.angerLikelihood === 'VERY_LIKELY' || face.angerLikelihood === 'LIKELY') vibeTag = 'cool';
+
+      const query = supabase.from('korean_names').select('*').like('vibe_tags', `%${vibeTag}%`);
+      if (gender === 'U') query.eq('gender_primary', 'U');
+      else query.in('gender_primary', [gender, 'U']);
+      
+      const { data: names, error: nameError } = await query;
+      if (nameError) throw nameError;
+      if (!names || names.length === 0) {
+        return res.status(404).json({ success: false, message: "Sorry, we couldn't find a matching name for your vibe." });
+      }
+      recommendedName = names[Math.floor(Math.random() * names.length)];
     }
     
-    const recommendedName = names[Math.floor(Math.random() * names.length)];
-    
+    // --- UNIVERSAL SMART MAPPING LOGIC ---
     const baseNameId = recommendedName.name_id.replace(/_\d+$/, '');
     const { data: celebrityData } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
     
