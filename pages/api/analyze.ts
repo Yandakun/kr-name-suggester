@@ -49,8 +49,31 @@ export default async function handler(
     if (!image || !gender || !age) {
       return res.status(400).json({ success: false, message: 'Image, gender, and age are required.' });
     }
+
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★  DEBUG MODE SWITCH (RESTORED!)      ★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    if (age === '999') {
+      const debugNameId = 'hajun_하준_01'; // Using 'hajun' as requested
+      console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugNameId}' result.`);
+      
+      const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugNameId).single();
+      if(nameError || !nameData) {
+        console.error("Debug name data error:", nameError);
+        return res.status(404).json({ success: false, message: `Debug name data for '${debugNameId}' not found in DB.` });
+      }
+
+      const baseNameId = debugNameId.replace(/_\d+$/, '');
+      const { data: celebData, error: celebError } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
+      if(celebError) {
+          console.warn(`Could not find celebrity debug data for '${baseNameId}', but that's okay.`);
+      }
+
+      return res.status(200).json({ success: true, name: nameData, celebrities: celebData || [] });
+    }
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     
-    // --- AI Analysis Logic ---
+    // --- Normal Logic ---
     const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
     const [result] = await visionClient.annotateImage({
       image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }],
@@ -65,29 +88,21 @@ export default async function handler(
     else if (face.sorrowLikelihood === 'VERY_LIKELY' || face.sorrowLikelihood === 'LIKELY') vibeTag = 'calm';
     else if (face.angerLikelihood === 'VERY_LIKELY' || face.angerLikelihood === 'LIKELY') vibeTag = 'cool';
 
-    const query = supabase.from('korean_names').select('*').like('vibe_tags', `%${vibeTag}%`);
-    if (gender === 'U') {
-        query.eq('gender_primary', 'U');
-    } else {
-        query.in('gender_primary', [gender, 'U']);
-    }
-    const { data: names, error: nameError } = await query;
+    const { data: names, error: nameError } = await supabase.from('korean_names').select('*').eq('gender_primary', gender).like('vibe_tags', `%${vibeTag}%`);
     if (nameError) throw nameError;
     if (!names || names.length === 0) {
       return res.status(404).json({ success: false, message: "Sorry, we couldn't find a matching name for your vibe." });
     }
     
     const recommendedName = names[Math.floor(Math.random() * names.length)];
-    
-    // --- THE ULTIMATE FIX ---
-    // The server now calls our "data specialist" (the SQL function)
-    // and passes the full name_id to it.
-    const { data: celebrityData, error: celebError } = await supabase
-      .rpc('get_celebrities_by_base_name_id', { p_name_id: recommendedName.name_id });
 
-    if (celebError) {
-        console.error("Error calling RPC:", celebError);
-    }
+    const fullNameId = recommendedName.name_id;
+    const baseNameId = fullNameId.replace(/_\d+$/, '');
+
+    const { data: celebrityData } = await supabase
+      .from('celebrities')
+      .select('*')
+      .like('name_id', `${baseNameId}%`);
     
     res.status(200).json({ 
         success: true, 
