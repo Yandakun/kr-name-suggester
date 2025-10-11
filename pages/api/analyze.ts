@@ -56,17 +56,17 @@ export default async function handler(
     if (age === '999') {
       const debugFullNameId = 'jisoo_지수_01'; 
       console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugFullNameId}' result.`);
+      
       const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
       if (nameError || !nameData) {
         return res.status(404).json({ success: false, message: `Debug name data for '${debugFullNameId}' not found.` });
       }
       recommendedName = nameData;
+
     } else {
       // --- Normal Logic ---
       const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
-      const [result] = await visionClient.annotateImage({
-        image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }],
-      });
+      const [result] = await visionClient.annotateImage({ image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }] });
       const faces = result.faceAnnotations;
       if (!faces || faces.length !== 1) {
         return res.status(400).json({ success: false, message: `Expected 1 face, but found ${faces?.length || 0}.` });
@@ -82,16 +82,21 @@ export default async function handler(
       else query.in('gender_primary', [gender, 'U']);
       
       const { data: names, error: nameError } = await query;
-      if (nameError) throw nameError;
-      if (!names || names.length === 0) {
+      if (nameError || !names || names.length === 0) {
         return res.status(404).json({ success: false, message: "Sorry, we couldn't find a matching name for your vibe." });
       }
       recommendedName = names[Math.floor(Math.random() * names.length)];
     }
     
-    // --- UNIVERSAL SMART MAPPING LOGIC ---
+    // --- FOOLPROOF MAPPING LOGIC (AS PER YOUR DIRECTION!) ---
+    // 1. Get the base ID by removing the suffix (e.g., 'jisoo_지수_01' -> 'jisoo_지수')
     const baseNameId = recommendedName.name_id.replace(/_\d+$/, '');
-    const { data: celebrityData } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
+
+    // 2. Find ALL celebrities with that exact base ID. No more 'like' operator!
+    const { data: celebrityData } = await supabase
+      .from('celebrities')
+      .select('*')
+      .eq('name_id', baseNameId);
     
     res.status(200).json({ 
         success: true, 
@@ -101,8 +106,8 @@ export default async function handler(
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-    console.error('Error in recommendation API:', errorMessage);
-    res.status(500).json({ success: false, message: 'An error occurred during the recommendation process.' });
+    console.error('Error in API:', errorMessage);
+    res.status(500).json({ success: false, message: 'An error occurred during the process.' });
   }
 }
 
