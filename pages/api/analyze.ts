@@ -52,11 +52,9 @@ export default async function handler(
 
     let recommendedName;
 
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    // ★  DEBUG MODE SWITCH (RESTORED AND FINALIZED!) ★
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★ DEBUG MODE SWITCH (TARGETING JISOO) ★
     if (age === '999') {
-      const debugFullNameId = 'jisoo_지수_01'; // Target Jisoo for testing
+      const debugFullNameId = 'jisoo_지수_01'; 
       console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugFullNameId}' result.`);
       
       const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
@@ -83,7 +81,7 @@ export default async function handler(
       else query.in('gender_primary', [gender, 'U']);
       
       const { data: names, error: nameError } = await query;
-      if (nameError || !names || names.length === 0) {
+      if (nameError || !names || !names.length) {
         return res.status(404).json({ success: false, message: "Sorry, we couldn't find a matching name for your vibe." });
       }
       recommendedName = names[Math.floor(Math.random() * names.length)];
@@ -91,10 +89,14 @@ export default async function handler(
     
     // --- UNIVERSAL SMART MAPPING LOGIC ---
     const baseNameId = recommendedName.name_id.replace(/_\d+$/, '');
+    
+    // ★★★ THIS IS THE UPGRADE ★★★
+    // We now fetch ALL celebrities and ORDER them by their ID.
     const { data: celebrityData } = await supabase
       .from('celebrities')
       .select('*')
-      .eq('base_name_id', baseNameId);
+      .like('name_id', `${baseNameId}%`)
+      .order('id', { ascending: true }); // Sort by id, low to high
     
     res.status(200).json({ 
         success: true, 
