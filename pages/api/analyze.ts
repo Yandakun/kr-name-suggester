@@ -49,28 +49,8 @@ export default async function handler(
     if (!image || !gender || !age) {
       return res.status(400).json({ success: false, message: 'Image, gender, and age are required.' });
     }
-
-    // ★★★ DEBUG MODE SWITCH (Using Jisoo) ★★★
-    if (age === '999') {
-      const debugFullNameId = 'jisoo_지수_01'; 
-      console.log(`🚀 DEBUG MODE ACTIVATED: Forcing '${debugFullNameId}' result.`);
-      
-      const { data: nameData, error: nameError } = await supabase.from('korean_names').select('*').eq('name_id', debugFullNameId).single();
-      if(nameError || !nameData) {
-        return res.status(404).json({ success: false, message: `Debug name data for '${debugFullNameId}' not found in DB.` });
-      }
-
-      const baseNameId = debugFullNameId.replace(/_\d+$/, '');
-      const { data: celebData, error: celebError } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
-      if(celebError) {
-          console.warn(`Could not find celebrity debug data for '${baseNameId}', but that's okay.`);
-      }
-
-      return res.status(200).json({ success: true, name: nameData, celebrities: celebData || [] });
-    }
-    // ★★★ END DEBUG MODE ★★★
     
-    // --- Normal Logic ---
+    // --- AI Analysis Logic ---
     const base64Image = image.replace(/^data:image\/\w+;base64,/, '');
     const [result] = await visionClient.annotateImage({
       image: { content: base64Image }, features: [{ type: 'FACE_DETECTION' }],
@@ -99,8 +79,15 @@ export default async function handler(
     
     const recommendedName = names[Math.floor(Math.random() * names.length)];
     
-    const baseNameId = recommendedName.name_id.replace(/_\d+$/, '');
-    const { data: celebrityData } = await supabase.from('celebrities').select('*').like('name_id', `${baseNameId}%`);
+    // --- THE ULTIMATE FIX ---
+    // The server now calls our "data specialist" (the SQL function)
+    // and passes the full name_id to it.
+    const { data: celebrityData, error: celebError } = await supabase
+      .rpc('get_celebrities_by_base_name_id', { p_name_id: recommendedName.name_id });
+
+    if (celebError) {
+        console.error("Error calling RPC:", celebError);
+    }
     
     res.status(200).json({ 
         success: true, 
